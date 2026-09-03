@@ -1,0 +1,26 @@
+# macOS
+.DS_Store
+
+# Xcode — build products and derived state
+build/
+DerivedData/
+*.xcarchive
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Xcode — per-user editor state, not part of the project
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+*.moved-aside
+*.hmap
+*.perspectivev3
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Local scratch
+*.log
