@@ -1,0 +1,860 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relays — a Bluesky client that shows you the network underneath</title>
+<meta name="description" content="Relays is a Bluesky client for iOS and macOS that shows which server hosts a post, which service moderated it, and the firehose itself.">
+<meta name="color-scheme" content="dark light">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230085FF'/%3E%3Ctext x='32' y='45' font-family='ui-monospace,Menlo,monospace' font-size='40' font-weight='600' text-anchor='middle' fill='%23000'%3ER%3C/text%3E%3C/svg%3E">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="Relays">
+<meta property="og:description" content="A Bluesky client that shows you the network underneath.">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=Inter:wght@300;400;500;600&display=swap">
+
+<style>
+  /* Dark first, because the app is. Light is the deliberate second set. */
+  :root {
+    --ground:      #08090B;
+    --surface:     #101217;
+    --surface-2:   #171A20;
+    --hairline:    rgba(233,238,245,0.10);
+    --hairline-2:  rgba(233,238,245,0.20);
+    --ink:         #ECEEF2;
+    --muted:       #878E99;
+    --faint:       #565D67;
+    --signal:      #4A9EFF;
+    --signal-deep: #0085FF;
+    --signal-soft: rgba(74,158,255,0.12);
+    --good:        #4BB07A;
+    --warn:        #E0A33E;
+
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+    --measure: 64ch;
+    --page: 1020px;
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --ground:      #FBFBFC;
+      --surface:     #FFFFFF;
+      --surface-2:   #F2F4F7;
+      --hairline:    rgba(11,13,17,0.11);
+      --hairline-2:  rgba(11,13,17,0.24);
+      --ink:         #0B0D11;
+      --muted:       #545B66;
+      --faint:       #7E858F;
+      --signal:      #0B62D6;
+      --signal-deep: #0B62D6;
+      --signal-soft: rgba(11,98,214,0.09);
+      --good:        #2E8158;
+      --warn:        #9A6B12;
+    }
+  }
+
+  :root[data-theme="light"] {
+    --ground:      #FBFBFC;
+    --surface:     #FFFFFF;
+    --surface-2:   #F2F4F7;
+    --hairline:    rgba(11,13,17,0.11);
+    --hairline-2:  rgba(11,13,17,0.24);
+    --ink:         #0B0D11;
+    --muted:       #545B66;
+    --faint:       #7E858F;
+    --signal:      #0B62D6;
+    --signal-deep: #0B62D6;
+    --signal-soft: rgba(11,98,214,0.09);
+    --good:        #2E8158;
+    --warn:        #9A6B12;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-weight: 300;
+    font-size: 16.5px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: var(--signal); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  :focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; border-radius: 3px; }
+
+  /* ---------- Shell ---------- */
+
+  .shell { max-width: var(--page); margin: 0 auto; padding: 0 clamp(20px, 5vw, 40px); }
+
+  header.bar {
+    position: sticky; top: 0; z-index: 30;
+    background: color-mix(in srgb, var(--ground) 88%, transparent);
+    backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--hairline);
+  }
+  .bar-inner {
+    max-width: var(--page); margin: 0 auto;
+    padding: 0 clamp(20px, 5vw, 40px);
+    height: 62px; display: flex; align-items: center; gap: 10px;
+  }
+  .mark {
+    font-family: var(--mono); font-size: 17px; font-weight: 500;
+    letter-spacing: -0.01em; color: var(--ink);
+    background: none; border: 0; padding: 0; cursor: pointer;
+  }
+  nav { margin-left: auto; display: flex; gap: 2px; flex-wrap: wrap; }
+  nav button {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.09em;
+    text-transform: uppercase; color: var(--muted);
+    background: none; border: 0; padding: 7px 10px; border-radius: 6px; cursor: pointer;
+  }
+  nav button:hover { color: var(--ink); background: var(--surface); }
+  nav button[aria-current="page"] { color: var(--signal); background: var(--signal-soft); }
+
+  /* ---------- The trace field ---------- */
+
+  .hero { position: relative; overflow: hidden; border-bottom: 1px solid var(--hairline); }
+  #traces { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .hero .shell { position: relative; padding-top: clamp(64px, 13vw, 132px); padding-bottom: clamp(52px, 10vw, 104px); }
+
+  h1 {
+    font-family: var(--mono); font-weight: 400;
+    font-size: clamp(38px, 7.6vw, 76px); line-height: 1.02;
+    letter-spacing: -0.035em; margin: 0 0 22px; text-wrap: balance;
+  }
+  h1 em { font-style: normal; color: var(--signal); }
+
+  .standfirst { max-width: 54ch; font-size: clamp(17px, 2.3vw, 20px); color: var(--muted); margin: 0; }
+
+  .cta-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 32px; }
+  .cta {
+    font-family: var(--mono); font-size: 12.5px; letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 12px 20px; border-radius: 999px; border: 1px solid transparent; cursor: pointer;
+    background: var(--signal-deep); color: #fff;
+  }
+  .cta.ghost { background: none; border-color: var(--hairline-2); color: var(--ink); }
+  .cta:hover { filter: brightness(1.08); }
+
+  .figures {
+    display: flex; flex-wrap: wrap; gap: 6px 30px; margin-top: 40px;
+    padding-top: 20px; border-top: 1px solid var(--hairline);
+    font-family: var(--mono); font-size: 12px; color: var(--faint);
+    font-variant-numeric: tabular-nums;
+  }
+  .figures b { color: var(--ink); font-weight: 400; }
+
+  /* ---------- Sections ---------- */
+
+  main { display: block; }
+  section { padding: clamp(52px, 8vw, 92px) 0; border-bottom: 1px solid var(--hairline); }
+  section:last-child { border-bottom: 0; }
+
+  .eyebrow {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.17em;
+    text-transform: uppercase; color: var(--signal); margin: 0 0 14px;
+  }
+  h2 {
+    font-family: var(--mono); font-weight: 400;
+    font-size: clamp(24px, 3.9vw, 34px); line-height: 1.16; letter-spacing: -0.02em;
+    margin: 0 0 18px; text-wrap: balance;
+  }
+  h3 { font-family: var(--mono); font-weight: 500; font-size: 15.5px; margin: 0; line-height: 1.35; }
+  h4 { font-family: var(--mono); font-weight: 500; font-size: 13.5px; margin: 26px 0 8px; color: var(--ink); }
+
+  p { margin: 0 0 15px; max-width: var(--measure); }
+  p:last-child { margin-bottom: 0; }
+  .lede { font-size: 18px; color: var(--ink); }
+  strong { font-weight: 500; }
+  code {
+    font-family: var(--mono); font-size: 0.86em; color: var(--muted);
+    background: var(--surface-2); border: 1px solid var(--hairline);
+    border-radius: 4px; padding: 1px 5px; word-break: break-word;
+  }
+
+  /* ---------- Three ideas ---------- */
+
+  .ideas { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1px;
+           background: var(--hairline); border: 1px solid var(--hairline); border-radius: 14px; overflow: hidden; }
+  .idea { background: var(--surface); padding: 26px 24px 28px; display: flex; flex-direction: column; gap: 10px; }
+  .idea .n { font-family: var(--mono); font-size: 11px; color: var(--signal); letter-spacing: 0.14em; }
+  .idea p { font-size: 14.5px; color: var(--muted); margin: 0; }
+
+  /* ---------- Feature groups ---------- */
+
+  .groups { display: flex; flex-direction: column; gap: 34px; }
+  .group { display: grid; grid-template-columns: minmax(0, 210px) minmax(0, 1fr); gap: 8px 34px; align-items: start; }
+  .group > h3 { padding-top: 2px; }
+  .group ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 9px; }
+  .group li { font-size: 15px; color: var(--muted); padding-left: 17px; position: relative; max-width: var(--measure); }
+  .group li::before {
+    content: ""; position: absolute; left: 0; top: 0.62em;
+    width: 8px; height: 1px; background: var(--hairline-2);
+  }
+  .group li b { color: var(--ink); font-weight: 500; }
+
+  @media (max-width: 680px) { .group { grid-template-columns: 1fr; gap: 12px; } }
+
+  /* ---------- The census ---------- */
+  /* Big figures, used once, where the figures are the argument. */
+  .census {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 26px 34px; margin: 30px 0 22px;
+  }
+  .census div { display: flex; flex-direction: column; gap: 3px; }
+  .census .v {
+    font-family: var(--mono); font-size: clamp(26px, 4.4vw, 38px); line-height: 1;
+    letter-spacing: -0.03em; font-variant-numeric: tabular-nums; color: var(--ink);
+  }
+  .census .v.lit { color: var(--signal); }
+  .census .k { font-family: var(--mono); font-size: 11px; letter-spacing: 0.13em;
+               text-transform: uppercase; color: var(--faint); }
+
+  /* ---------- Notes and tables ---------- */
+
+  .note {
+    border-left: 2px solid var(--hairline-2); padding: 2px 0 2px 15px;
+    font-size: 14.5px; color: var(--faint); max-width: var(--measure);
+  }
+  .note.flag { border-left-color: var(--warn); color: var(--muted); }
+
+  .table-wrap { overflow-x: auto; border: 1px solid var(--hairline); border-radius: 12px; background: var(--surface); }
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+  th, td { text-align: left; padding: 12px 15px; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: 0; }
+  th { font-family: var(--mono); font-weight: 400; font-size: 11px; letter-spacing: 0.13em;
+       text-transform: uppercase; color: var(--faint); }
+  td:first-child { font-family: var(--mono); font-size: 13px; white-space: nowrap; }
+  td:last-child { color: var(--muted); }
+
+  /* ---------- Legal pages ---------- */
+
+  .doc { max-width: var(--measure); }
+  .doc h2 { margin-top: 0; }
+  .doc h4:first-of-type { margin-top: 8px; }
+  .doc ul { padding-left: 18px; margin: 0 0 15px; }
+  .doc li { margin-bottom: 7px; color: var(--muted); }
+  .stamp { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-bottom: 26px; }
+
+  /* A link that happens to be a button, because the page routes itself. */
+  .inline-link {
+    background: none; border: 0; padding: 0; cursor: pointer;
+    font: inherit; color: var(--signal); text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  footer {
+    border-top: 1px solid var(--hairline); padding: 34px 0 56px;
+    font-size: 13.5px; color: var(--faint);
+  }
+  .foot-row { display: flex; flex-wrap: wrap; gap: 10px 26px; align-items: baseline; }
+  .foot-row button {
+    background: none; border: 0; padding: 0; cursor: pointer; color: var(--muted);
+    font-family: var(--sans); font-size: 13.5px;
+  }
+  .foot-row button:hover { color: var(--ink); }
+
+  [hidden] { display: none !important; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="bar-inner">
+    <button class="mark" data-go="home">Relays</button>
+    <nav aria-label="Sections">
+      <button data-go="home">Overview</button>
+      <button data-go="features">Features</button>
+      <button data-go="privacy">Privacy</button>
+      <button data-go="terms">Terms</button>
+      <button data-go="support">Support</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<!-- ============================= HOME ============================= -->
+<div id="page-home">
+
+  <div class="hero">
+    <canvas id="traces" aria-hidden="true"></canvas>
+    <div class="shell">
+      <h1>A Bluesky client that shows you<br><em>the network underneath</em>.</h1>
+      <p class="standfirst">Relays reads the AT Protocol the way it is actually built &mdash; many servers,
+      many moderators, one open stream. It shows you which of them you are talking to.</p>
+      <div class="cta-row">
+        <button class="cta" data-go="features">What it does</button>
+        <button class="cta ghost" data-go="support">Get help</button>
+      </div>
+      <div class="figures">
+        <span>iOS &amp; macOS</span>
+        <span>Endpoints <b>66</b></span>
+        <span>Tests <b>256</b></span>
+        <span>Trackers <b>0</b></span>
+        <span>Languages <b>English, German</b></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="shell">
+
+    <section>
+      <p class="eyebrow">The idea</p>
+      <h2>Three things no other client puts in front of you</h2>
+      <div class="ideas">
+        <div class="idea">
+          <span class="n">01</span>
+          <h3>Where a post lives</h3>
+          <p>Every account sits on a server, and which one is public information nobody surfaces.
+          Relays reads it out of the DID document and writes it under the post. You can filter by it.</p>
+        </div>
+        <div class="idea">
+          <span class="n">02</span>
+          <h3>Who moderated it</h3>
+          <p>Moderation here is a choice between services, not a fact of nature. Subscribe to the
+          ones you trust, set every label yourself &mdash; and on anything hidden or covered, Relays says
+          which layer decided and who applied it.</p>
+        </div>
+        <div class="idea">
+          <span class="n">03</span>
+          <h3>The network itself</h3>
+          <p>The hairline under the wordmark is the firehose: every record on the network as it is
+          written. Tap the title for throughput, latency, composition and a ranking of servers.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <p class="eyebrow">Your server, your name</p>
+      <h2>You are never asked where your account lives</h2>
+      <p class="lede">Sign in with a handle. Relays resolves it to the server that actually hosts it
+      &mdash; through the PLC directory or the domain itself &mdash; and talks to that one. There is no server
+      field to get wrong, and self-hosted accounts work the same as everyone else&lsquo;s.</p>
+      <p>And it tells you the answer before you type a password. Type a handle and the line under
+      the field names the machine that account is on, whether it is up, and how many accounts it
+      holds &mdash; all of it public, none of it requiring you to be signed in to anything. Nobody
+      else says it out loud.</p>
+      <p class="note">Relays signs in with an <b>app password</b>, never your account password. It
+      lives in the Keychain and can be revoked without touching your account. Making a new account
+      is not in the app &mdash; see <button class="inline-link" data-go="features">what it does not
+      do</button> for why.</p>
+    </section>
+
+    <section>
+      <p class="eyebrow">The register</p>
+      <h2>Six thousand servers, and eighty-nine of them are Bluesky&lsquo;s</h2>
+      <p class="lede">Every relay keeps a list of the servers it reads from, and hands it out to
+      anyone who asks. No sign-in, no key. Relays shows you that list.</p>
+      <div class="census">
+        <div><span class="v">6,156</span><span class="k">Servers</span></div>
+        <div><span class="v lit">6,067</span><span class="k">Not Bluesky&lsquo;s</span></div>
+        <div><span class="v">552,880</span><span class="k">Accounts on those</span></div>
+        <div><span class="v">1,922</span><span class="k">Up right now</span></div>
+      </div>
+      <p class="note">Read from <code>relay1.us-west.bsky.network</code> while this page was
+      written. The app fetches it live, so your numbers will differ.</p>
+      <p>The readings screen already estimated this from the firehose. A sample tells you who is
+      writing this minute, weighted by how much they write; the register tells you who exists,
+      weighted by how many accounts they hold. Those are different questions, so Relays shows both
+      and labels which is which.</p>
+    </section>
+
+    <section>
+      <p class="eyebrow">Moderation</p>
+      <h2>Two layers, and you can tell them apart</h2>
+      <p><strong>What the network knows</strong> travels with your account and holds in every client:
+      the moderation services you subscribe to, your setting for each of their labels, muted words,
+      mute and block lists, who may reply to your posts and who may quote them.</p>
+      <p><strong>What only your phone knows</strong> never leaves it: local feed rules with regular
+      expressions, domain and handle filters, and a rule for showing only self-hosted accounts &mdash;
+      things the protocol has no place to store.</p>
+      <p>Anything covered says which of the two decided it, and names the service if a service did.
+      A moderation decision with no author is indistinguishable from a bug.</p>
+      <div class="cta-row">
+        <button class="cta ghost" data-go="features">See the full list</button>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<!-- ============================= FEATURES ============================= -->
+<div id="page-features" hidden>
+  <div class="shell">
+    <section>
+      <p class="eyebrow">Everything it does</p>
+      <h2>Features</h2>
+      <p class="lede">Written against the AT Protocol directly &mdash; 66 endpoints, no intermediary
+      service of its own. Where something has a caveat, the caveat is here too.</p>
+    </section>
+
+    <section>
+      <div class="groups">
+
+        <div class="group">
+          <h3>Reading</h3>
+          <ul>
+            <li>Your following timeline, saved feeds and lists, in one switcher</li>
+            <li>Threads with the whole chain of parents, and replies shown with who they answer</li>
+            <li><b>Discovery</b> on the search screen before you type: feeds other people keep, accounts the network suggests</li>
+            <li>Search across accounts and posts, hashtags, and the posts that quote a given post</li>
+            <li><b>Every counter leads somewhere</b>: who liked a post, who reposted it, who quoted it</li>
+            <li>A quoted feed, list, starter pack or moderation service is drawn as itself &mdash; and a
+            quote that is gone says whether it was deleted, blocked, or taken back by its author</li>
+            <li>Yesterday&lsquo;s page shows instantly from a local cache while today&lsquo;s loads</li>
+          </ul>
+        </div>
+
+        <div class="group">
+          <h3>Posting</h3>
+          <ul>
+            <li>Up to four pictures with alt text, or one video</li>
+            <li>Links, hashtags and @-mentions resolved as you type &mdash; indexed in UTF-8 bytes, the way the protocol counts</li>
+            <li>Quotes, replies, reposts, and deleting your own posts</li>
+            <li><b>Reply and quote rules per post</b>: everyone, people you follow, people you mention, your followers, or nobody</li>
+            <li>Fold a reply away in a thread you started &mdash; hidden for everyone reading it, still there in the network</li>
+          </ul>
+        </div>
+
+        <div class="group">
+          <h3>Moderation</h3>
+          <ul>
+            <li><b>Subscribe to moderation services</b> and set each of their labels to show, warn or hide</li>
+            <li>Labels act: posts are hidden, covered, blurred or flagged, with the reason and its source</li>
+            <li>Muted words with targets, expiry, and an exception for people you follow</li>
+            <li>Mute and block lists &mdash; subscribe to somebody else&lsquo;s, or keep your own</li>
+            <li>Report to a service you chose, not only to whichever one your server picks</li>
+            <li>Hide a single post for yourself; block, mute, and see who blocked you</li>
+            <li>A sensitive-content switch that is off until you turn it on</li>
+          </ul>
+        </div>
+
+        <div class="group">
+          <h3>Messages</h3>
+          <ul>
+            <li>Conversations, history, and starting a new one from a search</li>
+            <li>Mute a conversation, leave it, or report a single message</li>
+            <li>Set who may message you: everyone, people you follow, or nobody</li>
+          </ul>
+        </div>
+
+        <div class="group">
+          <h3>The relay</h3>
+          <ul>
+            <li>The hairline under the wordmark carries the live firehose &mdash; brighter where the network wrote more</li>
+            <li>Tap the title for throughput, median latency, composition, and a sampled ranking of servers with the share that are self-hosted</li>
+            <li><b>The relay&lsquo;s own register</b>: every server it reads from, with account counts and whether each is up &mdash; searchable, and told apart from the sample it sits under</li>
+            <li>The sign-in screen&lsquo;s backdrop is the same stream: the last minute of the network, before you have signed in to anything</li>
+            <li>Type a handle there and it names the server that handle lives on, before any password</li>
+          </ul>
+        </div>
+
+        <div class="group">
+          <h3>Notifications</h3>
+          <ul>
+            <li>All <b>thirteen kinds</b> the protocol defines, each with its own words &mdash; and a
+            fourteenth it has not met yet still gets a sentence rather than a raw identifier</li>
+            <li>Settings that live on your account, not on the phone: per kind, off, in the list, or
+            worth interrupting you for &mdash; and they apply in every client you use</li>
+            <li>A reply opens the reply, not the post it answered</li>
+            <li>Muted accounts stay muted here too</li>
+          </ul>
+        </div>
+
+        <div class="group">
+          <h3>Provenance</h3>
+          <ul>
+            <li>The hosting server printed under every post</li>
+            <li>A record inspector: the raw JSON of any post, its DID, CID, AT URI and facets</li>
+            <li>Export your whole repository as a signed CAR file &mdash; every post, like and follow, readable offline</li>
+          </ul>
+        </div>
+
+        <div class="group">
+          <h3>The app itself</h3>
+          <ul>
+            <li>Four grounds &mdash; light, dim, dark and Bluesky blue &mdash; and two languages</li>
+            <li>Three text sizes, and it follows the system size up to 145%</li>
+            <li>VoiceOver throughout: a post reads as one thing, not as seven</li>
+            <li>Says when you are offline instead of blaming the server, and reloads when the connection returns</li>
+            <li>Several accounts, switched without signing out</li>
+            <li>A real Mac app, not a stretched phone one: &#8984;R and a refresh control where a Mac has no pull gesture</li>
+          </ul>
+        </div>
+
+      </div>
+    </section>
+
+    <section>
+      <p class="eyebrow">Straight answers</p>
+      <h2>What it does not do</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Thing</th><th>Where it stands</th></tr></thead>
+          <tbody>
+            <tr><td>App Store</td><td>Not submitted. Relays is not on sale anywhere.</td></tr>
+            <tr><td>Making an account</td><td>Built, then taken out. Bluesky&lsquo;s server says it requires a phone number and then refuses to send a code &mdash; checked with three numbers from three countries. A form nobody can finish is worse than no form. Sign up elsewhere and sign in here.</td></tr>
+            <tr><td>Notifications</td><td>Delivered by the app when iOS gives it time in the background. There is no push service behind it, so timing is up to the system &mdash; and the background mode for push is deliberately not declared until there is one.</td></tr>
+            <tr><td>Writing</td><td>No write path in the app has been run against a real account. Everything is checked against stubbed answers and against the live public network, which is not the same thing.</td></tr>
+            <tr><td>Direct messages</td><td>Need an app password with message access. An ordinary app password cannot read them, and the app says so rather than showing an error.</td></tr>
+            <tr><td>OAuth sign-in</td><td>Written, not shipped: it needs a hosted client file, and the app uses app passwords until it has one.</td></tr>
+            <tr><td>Analytics</td><td>None. No third-party code of any kind is in the app.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- ============================= PRIVACY ============================= -->
+<div id="page-privacy" hidden>
+  <div class="shell">
+    <section>
+      <div class="doc">
+        <p class="eyebrow">Legal</p>
+        <h2>Privacy Policy</h2>
+        <p class="stamp">Last updated 3 September 2026</p>
+
+        <p class="lede">Relays collects nothing about you. It has no servers of its own, no analytics,
+        no crash reporting and no third-party code. What follows is a description of where your data
+        goes instead &mdash; which is to the server you chose, and nowhere else.</p>
+
+        <h4>Who is responsible</h4>
+        <p>Relays is made by Benjamin Stiller. Questions about this policy go to the address on the
+        <button class="inline-link" data-go="support">Support</button> page.</p>
+
+        <h4>What Relays sends, and where</h4>
+        <p>Relays talks to the server that hosts your account and to the services that server works
+        with, and it reads two public things from a relay without signing in: the register of servers
+        on the network, and the live stream of records. Neither carries anything about you. Depending
+        on what you do in the app, what goes to your server includes:</p>
+        <ul>
+          <li><b>Your handle and DID</b> &mdash; the public names your account is known by across the network.</li>
+          <li><b>Your display name, description, profile picture and banner</b> &mdash; when you edit your profile.</li>
+          <li><b>Posts, replies, alt text and attached pictures or video</b> &mdash; when you write them. Video is processed by Bluesky&lsquo;s video service.</li>
+          <li><b>Direct messages</b> &mdash; when you send them, to Bluesky&lsquo;s chat service.</li>
+          <li><b>Your moderation settings</b> &mdash; subscribed services, per-label choices, muted words, saved feeds and reply rules. These live in your account&lsquo;s preferences so they work in every client.</li>
+          <li><b>Your notification settings</b> &mdash; which kinds reach you, and from whom. These live on your account too, so they apply in every client, not only this one.</li>
+        </ul>
+        <p>Everything in that list is data you are publishing or storing on your own account. Relays
+        is the thing that carries it there.</p>
+
+        <h4>What stays on your device</h4>
+        <ul>
+          <li><b>Your credential</b> &mdash; an app password, held in the iOS Keychain. It never leaves the device except to sign in to your server.</li>
+          <li><b>Your settings</b> &mdash; theme, language, text size and local feed rules, in the app&lsquo;s own preferences store.</li>
+          <li><b>Local feed rules</b> &mdash; keywords, regular expressions, domains and handles you filter on. These are deliberately never uploaded.</li>
+          <li><b>A cache of recent posts</b>, so a feed can appear before the network answers. Deleting the app removes it.</li>
+        </ul>
+
+        <h4>Tracking</h4>
+        <p>There is none. Relays contains no analytics SDK, no advertising identifier, no crash
+        reporter and no third-party libraries. Nothing about your use of the app is measured, and no
+        profile of you is built anywhere.</p>
+
+        <h4>The network is public</h4>
+        <p>The AT Protocol is an open network. Posts, likes, follows, blocks and profile information
+        are public records that anyone can read, including people not using Bluesky at all. Relays
+        does not change that, and cannot. Direct messages are not public, but they are stored by the
+        chat service, not encrypted end-to-end.</p>
+
+        <h4>Children</h4>
+        <p>The network requires you to be at least 13, and that is checked where accounts are made
+        &mdash; which is not in this app. Relays signs in to an account that already exists.</p>
+
+        <h4>Deleting your account</h4>
+        <p>You can delete your account from inside the app, under Settings &rarr; Delete account. Your
+        server sends a code by email, and the deletion removes everything the account holds. It
+        cannot be undone.</p>
+
+        <h4>Changes</h4>
+        <p>If this policy changes, the date above changes with it.</p>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- ============================= TERMS ============================= -->
+<div id="page-terms" hidden>
+  <div class="shell">
+    <section>
+      <div class="doc">
+        <p class="eyebrow">Legal</p>
+        <h2>Terms of Service</h2>
+        <p class="stamp">Last updated 3 September 2026</p>
+
+        <p class="lede">Relays is a client for a network it does not run. These terms cover the app.
+        The server hosting your account has its own terms, and those govern your account itself.</p>
+
+        <h4>What Relays is</h4>
+        <p>An application that reads and writes the AT Protocol on your behalf. It stores nothing for
+        you and hosts nothing. Your account, your posts and your messages live on your server.</p>
+
+        <h4>Your account</h4>
+        <p>You are responsible for your account and for keeping your credential to yourself. Relays
+        signs in with app passwords, which you can revoke at any time in your account settings
+        without changing your account password.</p>
+
+        <h4>Acceptable use</h4>
+        <p>There is no tolerance for objectionable content or abusive behaviour. You may not use
+        Relays to:</p>
+        <ul>
+          <li>post or send content that is unlawful, harassing, hateful, or that threatens or targets people;</li>
+          <li>post sexual content involving minors, or any content that sexualises them, under any circumstances;</li>
+          <li>impersonate another person or misrepresent who you are;</li>
+          <li>send unsolicited bulk messages, or automate the app to do so;</li>
+          <li>attempt to disrupt the network, the servers it runs on, or other people&lsquo;s use of it.</li>
+        </ul>
+
+        <h4>Moderation, and what the app gives you</h4>
+        <p>Every post and every account can be reported from inside the app, and reports go to a
+        moderation service &mdash; the one your server uses, or one you chose. You can block and mute
+        accounts, subscribe to moderation services and block lists, mute words, and hide individual
+        posts. Content flagged by a service you subscribe to is hidden or covered according to your
+        own settings.</p>
+        <p>Reports about content are acted on by the moderation service they are sent to, not by
+        Relays, which has no ability to remove anything from the network.</p>
+
+        <h4>Sensitive content</h4>
+        <p>The setting for sensitive content is off until you turn it on. With it off, anything a
+        service marks as adult is removed from view regardless of your other settings.</p>
+
+        <h4>No warranty</h4>
+        <p>Relays is provided as it is, without warranty of any kind. It depends on servers and
+        services operated by other people, and it cannot guarantee that they are available, correct
+        or that anything you post will be delivered or kept.</p>
+
+        <h4>Ending it</h4>
+        <p>Delete the app whenever you like; nothing of yours is held by it. Deleting your account
+        is a separate action, described in the privacy policy, and it is permanent.</p>
+
+        <h4>Law</h4>
+        <p>These terms are governed by German law.</p>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- ============================= SUPPORT ============================= -->
+<div id="page-support" hidden>
+  <div class="shell">
+    <section>
+      <div class="doc">
+        <p class="eyebrow">Help</p>
+        <h2>Support</h2>
+
+        <p class="lede">Write to <a href="mailto:support@relays.app">support@relays.app</a>. One
+        person reads it, so a specific message gets a specific answer faster.</p>
+
+        <h4>What to include</h4>
+        <ul>
+          <li>What you did, what happened, and what you expected instead;</li>
+          <li>your device and iOS version, and the app version from Settings &rarr; About;</li>
+          <li>a screenshot, if it is something you can see.</li>
+        </ul>
+        <p>Do not send your password or your app password. Nobody needs it, and support will never
+        ask for it.</p>
+
+        <h4>Things that are answered here already</h4>
+
+        <p><b>"This app password cannot use direct messages."</b> Ordinary app passwords cannot read
+        messages &mdash; the server will not issue a token for them. Create one with message access in
+        your account settings and sign in with that.</p>
+
+        <p><b>"Your sign-in no longer works."</b> The app password was revoked or expired. Relays
+        signs you out rather than retrying something that cannot succeed; sign in again with a
+        current one.</p>
+
+        <p><b>Notifications arrive late.</b> Relays checks in the background and delivers what it
+        finds. How often iOS gives it a turn is up to iOS, and there is no push service behind the
+        app to hurry it along.</p>
+
+        <p><b>Turning a notification kind off changed my other app too.</b> That is correct, and it
+        is the point. Those settings live on your account rather than on this phone, so every
+        Bluesky client you use reads the same ones. Settings &rarr; What reaches you.</p>
+
+        <p><b>I cannot create an account.</b> You cannot, not from here. Bluesky&lsquo;s server
+        advertises that it needs a phone number and then declines to send a code, so the form was
+        taken out rather than left in a state nobody could finish. Make the account in another
+        client or on the web, then sign in here with an app password.</p>
+
+        <p><b>A feed is empty after signing in.</b> Saved feeds come from your account&lsquo;s preferences.
+        If the connection dropped while they were loading, pull to refresh or reopen the app.</p>
+
+        <p><b>Sensitive content will not turn on.</b> It is a setting on your account, and it is off
+        by default. Settings &rarr; Moderation &rarr; Sensitive content.</p>
+
+        <h4>Reporting content</h4>
+        <p>Every post, account and message can be reported from its menu inside the app. Reports go
+        to a moderation service, which acts on them &mdash; Relays cannot remove anything from the network
+        itself. Blocking and muting take effect immediately and are yours alone.</p>
+
+        <h4>Deleting your account</h4>
+        <p>Settings &rarr; Delete account. Your server emails you a code; the deletion needs that code
+        and your password. It is permanent and it removes everything the account holds.</p>
+      </div>
+    </section>
+  </div>
+</div>
+
+</main>
+
+<footer>
+  <div class="shell">
+    <div class="foot-row">
+      <span style="font-family:var(--mono);color:var(--muted)">Relays</span>
+      <button data-go="features">Features</button>
+      <button data-go="privacy">Privacy</button>
+      <button data-go="terms">Terms</button>
+      <button data-go="support">Support</button>
+      <span style="margin-left:auto">Built on the AT Protocol. Not affiliated with Bluesky Social PBC.</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // ---- routing -------------------------------------------------------------
+  const pages = ["home", "features", "privacy", "terms", "support"];
+
+  function show(name) {
+    const target = pages.includes(name) ? name : "home";
+    pages.forEach(p => {
+      const el = document.getElementById("page-" + p);
+      if (el) el.hidden = p !== target;
+    });
+    document.querySelectorAll("nav button").forEach(b => {
+      if (b.dataset.go === target) b.setAttribute("aria-current", "page");
+      else b.removeAttribute("aria-current");
+    });
+    if (location.hash.slice(1) !== target) history.replaceState(null, "", "#" + target);
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }
+
+  document.addEventListener("click", e => {
+    const button = e.target.closest("[data-go]");
+    if (!button) return;
+    e.preventDefault();
+    show(button.dataset.go);
+  });
+  window.addEventListener("hashchange", () => show(location.hash.slice(1)));
+  show(location.hash.slice(1) || "home");
+
+  // ---- the trace field -----------------------------------------------------
+  // The same motif the app draws behind its sign-in screen: parallel traces,
+  // seeded so the picture is stable, with a lit stretch on some of them.
+  (function () {
+    const canvas = document.getElementById("traces");
+    if (!canvas) return;
+    const context = canvas.getContext("2d");
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    let seed = 20260830;
+    function random() {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      return seed / 0x7fffffff;
+    }
+
+    let traces = [];
+    function plan(count) {
+      seed = 20260830;
+      traces = [];
+      for (let i = 0; i < count; i++) {
+        const band = i / (count - 1);
+        traces.push({
+          y: Math.min(0.99, Math.max(0.01, band + (random() - 0.5) * 0.028)),
+          start: random() * 0.7 - 0.15,
+          length: 0.25 + random() * 0.7,
+          width: 0.6 + random() * 1.1,
+          base: 0.05 + random() * 0.1,
+          lit: random() > 0.6 ? 0.05 + random() * 0.6 : null,
+          phase: random() * Math.PI * 2,
+          rate: 0.25 + random() * 0.5
+        });
+      }
+    }
+
+    function ink() {
+      return getComputedStyle(document.documentElement).getPropertyValue("--ink").trim();
+    }
+    function signal() {
+      return getComputedStyle(document.documentElement).getPropertyValue("--signal").trim();
+    }
+
+    function hexToRGB(value) {
+      const hex = value.replace("#", "");
+      const full = hex.length === 3 ? hex.split("").map(c => c + c).join("") : hex;
+      const n = parseInt(full, 16);
+      return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    }
+
+    function size() {
+      const ratio = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = Math.max(1, Math.floor(rect.width * ratio));
+      canvas.height = Math.max(1, Math.floor(rect.height * ratio));
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      plan(rect.height > 520 ? 34 : 24);
+      return rect;
+    }
+
+    let rect = size();
+    let inkRGB = hexToRGB(ink());
+    let signalRGB = hexToRGB(signal());
+
+    window.addEventListener("resize", () => {
+      rect = size();
+      inkRGB = hexToRGB(ink());
+      signalRGB = hexToRGB(signal());
+    });
+
+    function frame(time) {
+      const seconds = time / 1000;
+      context.clearRect(0, 0, rect.width, rect.height);
+
+      for (const trace of traces) {
+        // A slow drift, so the field reads as something passing through rather
+        // than a pattern printed on the page.
+        const drift = still ? 1 : 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(seconds * trace.rate + trace.phase));
+        const y = Math.round(trace.y * rect.height) + 0.5;
+        const from = trace.start * rect.width;
+        const to = Math.min(rect.width, from + trace.length * rect.width);
+        if (to <= from) continue;
+
+        context.strokeStyle = "rgba(" + inkRGB.join(",") + "," + (trace.base * drift).toFixed(3) + ")";
+        context.lineWidth = trace.width;
+        context.beginPath();
+        context.moveTo(Math.max(0, from), y);
+        context.lineTo(to, y);
+        context.stroke();
+
+        if (trace.lit !== null) {
+          const litFrom = from + (to - from) * trace.lit;
+          const litTo = Math.min(to, litFrom + (to - from) * 0.16);
+          context.strokeStyle = "rgba(" + signalRGB.join(",") + "," + (0.5 * drift).toFixed(3) + ")";
+          context.beginPath();
+          context.moveTo(Math.max(0, litFrom), y);
+          context.lineTo(litTo, y);
+          context.stroke();
+        }
+      }
+
+      if (!still) requestAnimationFrame(frame);
+    }
+
+    requestAnimationFrame(frame);
+  })();
+</script>
+</body>
+</html>
