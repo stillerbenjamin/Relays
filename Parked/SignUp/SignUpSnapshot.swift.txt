@@ -1,0 +1,77 @@
+// Lifted out of RelaysTests/LayoutSnapshots.swift when sign-up was parked.
+// It belongs back inside that suite, not in a file of its own: it uses the
+// suite's private `render` helper.
+
+    @Test("The sign-up form renders in both shapes", arguments: [AppLanguage.en, .de])
+    func signUp(_ language: AppLanguage) throws {
+        L10n.language = language
+
+        // Two servers with different demands, side by side: the form is not one
+        // layout with optional bits, it is what the server asked for.
+        let phoneServer = ServerDescription(did: "did:web:bsky.social",
+                                            inviteCodeRequired: false,
+                                            phoneVerificationRequired: true,
+                                            availableUserDomains: [".bsky.social"],
+                                            links: .init(privacyPolicy: "https://example/p",
+                                                         termsOfService: "https://example/t"))
+        let inviteServer = ServerDescription(did: "did:web:pds.example",
+                                             inviteCodeRequired: true,
+                                             phoneVerificationRequired: false,
+                                             availableUserDomains: [".pds.example"],
+                                             links: nil)
+
+        func demands(_ described: ServerDescription, _ title: String) -> some View {
+            VStack(alignment: .leading, spacing: 8) {
+                RelaySectionTitle(text: title)
+                Text("maria" + described.handleSuffix)
+                    .font(Theme.Font.mono(11))
+                    .foregroundStyle(Theme.Palette.textTertiary)
+                if described.needsInviteCode {
+                    Text(L(.signUpInviteHint))
+                        .font(Theme.Font.micro)
+                        .foregroundStyle(Theme.Palette.textSecondary)
+                }
+                if described.needsPhone {
+                    Text(L(.signUpPhoneHint))
+                        .font(Theme.Font.micro)
+                        .foregroundStyle(Theme.Palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+
+        let view = VStack(alignment: .leading, spacing: 20) {
+            RelaySectionTitle(text: L(.signUpTitle))
+
+            demands(phoneServer, "bsky.social")
+            Hairline()
+            demands(inviteServer, "pds.example")
+            Hairline()
+
+            Text(L(.signUpPasswordHint))
+                .font(Theme.Font.micro)
+                .foregroundStyle(Theme.Palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 6) {
+                Text(L(.signUpPrompt))
+                    .foregroundStyle(Theme.Palette.textTertiary)
+                Text(L(.signUpOpen))
+                    .foregroundStyle(Theme.Palette.link)
+            }
+            .font(Theme.Font.ui(13))
+
+            Label(L(.deleteAccountHint), systemImage: "exclamationmark.triangle.fill")
+                .font(Theme.Font.ui(13))
+                .foregroundStyle(Theme.Palette.danger)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(12)
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Theme.Palette.danger.opacity(0.12)))
+        }
+        .padding(.horizontal, Theme.Metric.hPadding)
+        .padding(.vertical, 20)
+
+        try render(view, named: "signup-\(language.rawValue)", height: 620, language: language)
+        L10n.language = .en
+    }
