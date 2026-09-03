@@ -27,6 +27,13 @@ struct ComposeView: View {
     @State private var altTarget: ImageAttachment?
     @State private var suggestions: [ActorProfile] = []
     @State private var suggestionTask: Task<Void, Never>?
+    /// The card the first link in the text will carry. The app could draw these
+    /// from the start and never made one, so a link posted from here arrived as
+    /// bare text.
+    @State private var linkCard: LinkCard?
+    @State private var linkTask: Task<Void, Never>?
+    /// A link the author dismissed. Retyping it does not bring the card back.
+    @State private var refusedLink: String?
     @FocusState private var focused: Bool
 
     private let limit = 300
@@ -101,6 +108,11 @@ struct ComposeView: View {
                 attachmentStrip
             }
 
+            // Only where nothing else claims the post's one embed.
+            if attachments.isEmpty, video == nil, target.quoting == nil {
+                linkCardRow
+            }
+
             if let errorMessage {
                 Text(errorMessage)
                     .font(Theme.Font.caption)
@@ -125,6 +137,7 @@ struct ComposeView: View {
         }
         .onChange(of: text) { _, value in
             updateSuggestions(for: value)
+            updateLinkCard(for: value)
         }
         .sheet(item: $altTarget) { attachment in
             AltTextSheet(attachment: attachment)
@@ -301,6 +314,79 @@ struct ComposeView: View {
     }
 
     /// Videos are handed over as they are: the service transcodes them.
+    /// Looks up the first link as it is typed. Debounced for the same reason
+    /// the mention typeahead is: one request per keystroke would be a request
+    /// per keystroke to somebody else's server.
+    private func updateLinkCard(for value: String) {
+        linkTask?.cancel()
+
+        guard let url = LinkCardReader.firstLink(in: value) else {
+            linkCard = nil
+            return
+        }
+        // Already have it, or the author said no to this one.
+        guard url.absoluteString != linkCard?.uri,
+              url.absoluteString != refusedLink else { return }
+
+        linkTask = Task {
+            try? await Task.sleep(for: .milliseconds(700))
+            guard !Task.isCancelled else { return }
+            let card = await app.client.linkCard(for: url)
+            guard !Task.isCancelled,
+                  LinkCardReader.firstLink(in: text)?.absoluteString == url.absoluteString,
+                  url.absoluteString != refusedLink
+            else { return }
+            linkCard = card
+        }
+    }
+
+    /// What the card will look like, and the way to say no to it.
+    @ViewBuilder
+    private var linkCardRow: some View {
+        if let card = linkCard {
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(URL(string: card.uri)?.host()?
+                        .replacingOccurrences(of: "www.", with: "") ?? card.uri)
+                        .font(Theme.Font.mono(10))
+                        .foregroundStyle(Theme.Palette.textTertiary)
+                    Text(card.title ?? card.uri)
+                        .font(Theme.Font.ui(12, .medium))
+                        .foregroundStyle(Theme.Palette.textPrimary)
+                        .lineLimit(2)
+                    if let description = card.description, !description.isEmpty {
+                        Text(description)
+                            .font(Theme.Font.micro)
+                            .foregroundStyle(Theme.Palette.textSecondary)
+                            .lineLimit(2)
+                    }
+                }
+
+                Spacer(minLength: 0)
+
+                Button {
+                    refusedLink = card.uri
+                    linkCard = nil
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Theme.Palette.textTertiary)
+                        .padding(6)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(L(.composeRemoveCard))
+            }
+            .padding(10)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Theme.Palette.hairline, lineWidth: 1)
+            )
+            .padding(.horizontal, Theme.Metric.hPadding)
+            .padding(.bottom, 8)
+            .accessibilityElement(children: .combine)
+        }
+    }
+
     private func adoptVideo(_ item: PhotosPickerItem?) async {
         guard let item else { return }
         isPreparing = true
@@ -510,8 +596,19 @@ struct ComposeView: View {
                 }
 
                 let quote = target.quoting.map { StrongRef(uri: $0.uri, cid: $0.cid) }
+
+                // Only when nothing else claims the one embed a post carries.
+                var link: ATProtoClient.ExternalEmbed?
+                if let card = linkCard, images == nil, videoEmbed == nil, quote == nil {
+                    link = await app.client.externalEmbed(from: card) { data in
+                        await MainActor.run {
+                            ImageAttachment.prepare(data).map { ($0.data, "image/jpeg") }
+                        }
+                    }
+                }
+
                 let embed = ATProtoClient.PostEmbedPayload.make(images: images, video: videoEmbed,
-                                                                quoting: quote)
+                                                                quoting: quote, link: link)
 
                 let created = try await app.client.createPost(text: text, reply: reply,
                                                               embed: embed)

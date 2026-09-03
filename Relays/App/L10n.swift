@@ -72,7 +72,7 @@ enum LKey: String, CaseIterable {
     case verbLikeViaRepost, verbRepostViaRepost, verbStarterpackJoined
     case verbVerified, verbUnverified, verbSubscribedPost, verbContactMatch
     case verbUnknown
-    case notifyMore, verbStarterpackNamed
+    case notifyMore, verbStarterpackNamed, composeRemoveCard
     // The account's own notification settings
     case notifyKinds, notifyKindsHint, notifyAudience, notifyAudienceAll
     case notifyAudienceFollows, notifyAudienceMixed
@@ -342,6 +342,7 @@ enum L10n {
         .verbUnknown: "hat etwas getan, das Relays nicht kennt",
         .notifyMore: "und %@ weitere",
         .verbStarterpackNamed: "ist über %@ beigetreten",
+        .composeRemoveCard: "Vorschau entfernen",
         .notifyKinds: "Was dich erreicht",
         .notifyKindsHint: "Diese Einstellungen liegen auf dem Konto, nicht auf diesem Gerät. Sie gelten in jedem Bluesky-Client, den du benutzt.",
         .notifyAudience: "Von wem",
@@ -774,6 +775,7 @@ enum L10n {
         .verbUnknown: "did something Relays does not know about",
         .notifyMore: "and %@ more",
         .verbStarterpackNamed: "joined through %@",
+        .composeRemoveCard: "Remove the preview",
         .notifyKinds: "What reaches you",
         .notifyKindsHint: "These settings live on the account, not on this device. They apply in every Bluesky client you use.",
         .notifyAudience: "From whom",

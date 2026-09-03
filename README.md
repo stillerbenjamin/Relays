@@ -44,6 +44,10 @@ Links, hashtags and mentions are detected as you type and indexed in **UTF-8
 bytes**, which is how the protocol counts them. Quotes, replies, reposts, deleting
 your own posts.
 
+A link in the text becomes a card: Relays reads the page's own Open Graph
+tags, uploads the picture and attaches an `app.bsky.embed.external` — reading
+the page directly rather than handing every URL you type to a card service.
+
 Per post, before it exists: **who may reply** (everyone, people you follow, people
 you mention, your followers, nobody) and **whether it may be quoted**. Both are
 records in your own repository, so they hold in every client. In a thread you
@@ -203,13 +207,13 @@ xcodebuild test -project Relays.xcodeproj -scheme Relays \
   -parallel-testing-enabled NO
 ```
 
-**256 unit tests** in 62 suites, plus **4 UI tests**. `-parallel-testing-enabled NO`
+**267 unit tests** in 64 suites, plus **4 UI tests**. `-parallel-testing-enabled NO`
 matters twice over: the layout snapshots write into the host app's documents
 directory, and a parallel clone's container is thrown away before the files can
 be collected — and the stub transport is one shared queue, which parallel suites
 scramble. Without the flag around forty tests fail for no reason of their own.
 
-The same suites run on macOS, where 251 of them apply — picture attachment is a
+The same suites run on macOS, where 262 of them apply — picture attachment is a
 UIKit path with nothing on the other side, and one snapshot is macOS-only:
 
 ```bash
@@ -236,7 +240,7 @@ Note the renderer's limits: `LazyVStack`, `ScrollView`, `TextEditor` and `Menu`
 do not draw, so views under test are composed eagerly and menus appear as
 placeholder glyphs.
 
-**Live suites, disabled by default.** Eight suites talk to the real network. They
+**Live suites, disabled by default.** Nine suites talk to the real network. They
 need no account — everything they touch is public — but they need connectivity,
 so they do not run with the rest:
 
@@ -250,6 +254,7 @@ so they do not run with the rest:
 | The register against the live network | A relay hands out its host register |
 | The sign-in lookup against the live network | A handle resolves to the server it lives on |
 | Servers describing themselves, live | What real servers require of a new account |
+| Link cards against the live network | The project's own page reads as a card |
 
 Run one by name after touching the code it covers:
 

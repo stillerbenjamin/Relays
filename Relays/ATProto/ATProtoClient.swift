@@ -578,6 +578,7 @@ actor ATProtoClient {
         case video(VideoEmbed)
         case quote(RecordEmbed)
         case quoteWithImages(RecordWithMediaEmbed)
+        case external(ExternalEmbed)
 
         func encode(to encoder: Encoder) throws {
             switch self {
@@ -585,14 +586,18 @@ actor ATProtoClient {
             case .video(let embed): try embed.encode(to: encoder)
             case .quote(let embed): try embed.encode(to: encoder)
             case .quoteWithImages(let embed): try embed.encode(to: encoder)
+            case .external(let embed): try embed.encode(to: encoder)
             }
         }
 
         /// Builds the right shape from what the composer has. A video and pictures
         /// cannot travel together, so the video wins if both are somehow present.
         static func make(images: ImagesEmbed?, video: VideoEmbed? = nil,
-                         quoting: StrongRef?) -> PostEmbedPayload? {
+                         quoting: StrongRef?, link: ExternalEmbed? = nil) -> PostEmbedPayload? {
             if let video { return .video(video) }
+            // A post carries one embed. Anything the author put there on purpose
+            // outranks a card the app offered by itself, so the link goes last.
+            if images == nil, quoting == nil, let link { return .external(link) }
             switch (images, quoting) {
             case (let images?, let quote?):
                 return .quoteWithImages(RecordWithMediaEmbed(record: RecordEmbed(record: quote),
@@ -619,6 +624,67 @@ actor ATProtoClient {
         }
 
         enum CodingKeys: String, CodingKey { case type = "$type", images }
+    }
+
+    /// `app.bsky.embed.external` — the card a link carries in a post.
+    struct ExternalEmbed: Encodable {
+        let type = "app.bsky.embed.external"
+        let external: Item
+
+        struct Item: Encodable {
+            let uri: String
+            let title: String
+            let description: String
+            /// Optional: a card with no picture is still a card.
+            let thumb: BlobRef?
+        }
+
+        enum CodingKeys: String, CodingKey { case type = "$type", external }
+    }
+
+    /// Reads a page's own description of itself and uploads its picture, so the
+    /// post can carry a card. Returns nil rather than throwing: a link that will
+    /// not answer is not a reason to refuse the post.
+    func linkCard(for url: URL) async -> LinkCard? {
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 8
+        // Some sites serve a different page to something that does not look like
+        // a browser, and a few refuse outright.
+        request.setValue("Mozilla/5.0 (compatible; Relays/1.0; +https://github.com/stillerbenjamin/Relays)",
+                         forHTTPHeaderField: "User-Agent")
+        request.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
+
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode)
+        else { return nil }
+
+        // Only the head is needed, and an unbounded read of somebody else's URL
+        // is not something a composer should do.
+        let head = data.prefix(LinkCardReader.limit)
+        guard let html = String(data: head, encoding: .utf8)
+                ?? String(data: head, encoding: .isoLatin1) else { return nil }
+
+        let final = http.url ?? url
+        let card = LinkCardReader.card(from: html, url: final)
+        return card.isWorthShowing ? card : nil
+    }
+
+    /// Turns a read card into the embed a post carries, uploading the picture as
+    /// a blob. A picture that will not fetch or will not compress is dropped and
+    /// the card goes without it.
+    func externalEmbed(from card: LinkCard,
+                       thumbnail: @Sendable (Data) async -> (data: Data, mime: String)?)
+    async -> ExternalEmbed {
+        var blob: BlobRef?
+        if let imageURL = card.imageURL,
+           let (data, _) = try? await URLSession.shared.data(from: imageURL),
+           let prepared = await thumbnail(data) {
+            blob = try? await uploadBlob(data: prepared.data, mimeType: prepared.mime)
+        }
+        return ExternalEmbed(external: .init(uri: card.uri,
+                                             title: card.title ?? card.uri,
+                                             description: card.description ?? "",
+                                             thumb: blob))
     }
 
     @discardableResult
