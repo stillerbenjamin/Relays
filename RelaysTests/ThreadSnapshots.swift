@@ -93,6 +93,87 @@ struct ThreadSnapshots {
 }
 
 @MainActor
+@Suite("App passwords")
+struct AppPasswordSnapshots {
+
+    @Test("The register, with the thing it cannot know said out loud",
+          arguments: [AppLanguage.de, .en])
+    func passwords(_ language: AppLanguage) throws {
+        let entries = [
+            AppPassword(name: "Relays", createdAt: "2026-08-29T09:23:28.000Z", privileged: true),
+            AppPassword(name: "Old phone", createdAt: "2026-01-02T10:00:00.000Z", privileged: nil),
+            AppPassword(name: "Graysky", createdAt: "2025-11-14T18:40:00.000Z", privileged: false)
+        ]
+
+        try SnapshotSettings.pinned(language: language) { settings in
+            let view = VStack(alignment: .leading, spacing: 0) {
+                ScreenHeader(title: L(.appPasswordsTitle))
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(L(.appPasswordsHint))
+                        .font(Theme.Font.caption)
+                        .foregroundStyle(Theme.Palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Label(L(.appPasswordsWarning), systemImage: "exclamationmark.triangle")
+                        .font(Theme.Font.micro)
+                        .foregroundStyle(Theme.Palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    ForEach(entries) { entry in
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(entry.name)
+                                    .font(Theme.Font.ui(13, .medium))
+                                    .foregroundStyle(Theme.Palette.textPrimary)
+                                HStack(spacing: 8) {
+                                    Text(L(.appPasswordCreated,
+                                           RelativeTime.short(entry.createdAt)))
+                                        .font(Theme.Font.mono(10))
+                                        .foregroundStyle(Theme.Palette.textTertiary)
+                                    if entry.canUseMessages {
+                                        Text(L(.appPasswordMessages))
+                                            .font(Theme.Font.mono(10))
+                                            .foregroundStyle(Theme.Palette.accent)
+                                    }
+                                }
+                            }
+                            Spacer(minLength: 8)
+                            Text(L(.appPasswordRevoke))
+                                .font(Theme.Font.ui(12))
+                                .foregroundStyle(Theme.Palette.danger)
+                        }
+                        .padding(.vertical, 8)
+                        Hairline()
+                    }
+                }
+                .padding(.horizontal, Theme.Metric.hPadding)
+                .padding(.vertical, 20)
+                Spacer(minLength: 0)
+            }
+            .environment(AppModel())
+            .environment(settings)
+            .environment(Reachability())
+            .frame(width: 393, height: 560)
+            .background(Theme.Palette.background)
+
+            let renderer = ImageRenderer(content: view)
+            renderer.scale = 2
+            #if os(iOS)
+            let data = renderer.uiImage?.pngData()
+            #else
+            let data = renderer.nsImage.flatMap(\.tiffRepresentation)
+                .flatMap(NSBitmapImageRep.init(data:))
+                .flatMap { $0.representation(using: .png, properties: [:]) }
+            #endif
+            let png = try #require(data)
+            let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            try png.write(to: dir.appendingPathComponent(
+                "snapshot-passwords-\(language == .de ? "de" : "en").png"))
+        }
+    }
+}
+
+@MainActor
 @Suite("What reaches you")
 struct NotificationKindsSnapshots {
 

@@ -73,6 +73,11 @@ enum LKey: String, CaseIterable {
     case verbVerified, verbUnverified, verbSubscribedPost, verbContactMatch
     case verbUnknown
     case notifyMore, verbStarterpackNamed, composeRemoveCard
+    // App passwords
+    case appPasswordsTitle, appPasswordsHint, appPasswordsEmpty, appPasswordsWarning
+    case appPasswordCreated, appPasswordMessages, appPasswordRevoke, appPasswordRevokeAsk
+    case appPasswordNew, appPasswordName, appPasswordNamePlaceholder, appPasswordMake
+    case appPasswordOnce, appPasswordCopy, appPasswordCopied, appPasswordAllowMessages
     // The account's own notification settings
     case notifyKinds, notifyKindsHint, notifyAudience, notifyAudienceAll
     case notifyAudienceFollows, notifyAudienceMixed
@@ -343,6 +348,22 @@ enum L10n {
         .notifyMore: "und %@ weitere",
         .verbStarterpackNamed: "ist über %@ beigetreten",
         .composeRemoveCard: "Vorschau entfernen",
+        .appPasswordsTitle: "App-Passwörter",
+        .appPasswordsHint: "Womit sich Apps bei deinem Konto anmelden — dieses eingeschlossen. Jedes lässt sich einzeln zurücknehmen, ohne dein Kontopasswort zu ändern.",
+        .appPasswordsEmpty: "Noch keines angelegt.",
+        .appPasswordsWarning: "Relays kann nicht erkennen, welches davon es selbst benutzt — der Server verrät das nicht. Nimmst du das falsche zurück, meldet dich diese App ab.",
+        .appPasswordCreated: "Angelegt %@",
+        .appPasswordMessages: "Nachrichten",
+        .appPasswordRevoke: "Zurücknehmen",
+        .appPasswordRevokeAsk: "„%@\" zurücknehmen? Alles, was damit angemeldet ist, hört sofort auf zu arbeiten.",
+        .appPasswordNew: "Neues anlegen",
+        .appPasswordName: "Name",
+        .appPasswordNamePlaceholder: "Wofür ist es?",
+        .appPasswordMake: "Anlegen",
+        .appPasswordOnce: "Nur jetzt sichtbar. Der Server gibt es kein zweites Mal heraus.",
+        .appPasswordCopy: "Kopieren",
+        .appPasswordCopied: "kopiert",
+        .appPasswordAllowMessages: "Darf Nachrichten lesen",
         .notifyKinds: "Was dich erreicht",
         .notifyKindsHint: "Diese Einstellungen liegen auf dem Konto, nicht auf diesem Gerät. Sie gelten in jedem Bluesky-Client, den du benutzt.",
         .notifyAudience: "Von wem",
@@ -776,6 +797,22 @@ enum L10n {
         .notifyMore: "and %@ more",
         .verbStarterpackNamed: "joined through %@",
         .composeRemoveCard: "Remove the preview",
+        .appPasswordsTitle: "App passwords",
+        .appPasswordsHint: "What apps sign in to your account with — this one included. Each can be taken back on its own, without changing your account password.",
+        .appPasswordsEmpty: "None made yet.",
+        .appPasswordsWarning: "Relays cannot tell which of these it is using — the server does not say. Take back the wrong one and this app is signed out.",
+        .appPasswordCreated: "Made %@",
+        .appPasswordMessages: "Messages",
+        .appPasswordRevoke: "Take back",
+        .appPasswordRevokeAsk: "Take back \"%@\"? Anything signed in with it stops working at once.",
+        .appPasswordNew: "Make a new one",
+        .appPasswordName: "Name",
+        .appPasswordNamePlaceholder: "What is it for?",
+        .appPasswordMake: "Make it",
+        .appPasswordOnce: "Shown now and never again. The server does not hand it out twice.",
+        .appPasswordCopy: "Copy",
+        .appPasswordCopied: "copied",
+        .appPasswordAllowMessages: "May read messages",
         .notifyKinds: "What reaches you",
         .notifyKindsHint: "These settings live on the account, not on this device. They apply in every Bluesky client you use.",
         .notifyAudience: "From whom",

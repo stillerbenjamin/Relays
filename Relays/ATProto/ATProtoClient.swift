@@ -182,9 +182,14 @@ actor ATProtoClient {
         }
     }
 
-    /// An app password the app makes for itself. `privileged` is what direct
-    /// messages need; a server that does not know the flag has to be able to
-    /// answer the same call without it.
+    /// An app password, made here for another client or another device.
+    ///
+    /// The server returns it once and never again — there is no endpoint that
+    /// reads one back — so whatever asks for it has to put it in front of
+    /// somebody immediately.
+    ///
+    /// `privileged` is what direct messages need; a server that does not know
+    /// the flag has to be able to answer the same call without it.
     func createAppPassword(name: String, privileged: Bool) async throws -> String {
         struct Body: Encodable { let name: String; let privileged: Bool? }
         struct Response: Decodable { let password: String }
@@ -203,6 +208,22 @@ actor ATProtoClient {
                                                     body: Body(name: name, privileged: nil))
             return response.password
         }
+    }
+
+    /// The app passwords on this account. Names and dates only — the passwords
+    /// themselves are shown once, when they are made, and never again.
+    func appPasswords() async throws -> [AppPassword] {
+        struct Response: Decodable { let passwords: [AppPassword] }
+        let response: Response = try await send("com.atproto.server.listAppPasswords")
+        return response.passwords
+    }
+
+    /// Takes one back. Anything signed in with it stops working at once —
+    /// including this app, if this is the one it is using.
+    func revokeAppPassword(name: String) async throws {
+        struct Body: Encodable { let name: String }
+        try await sendVoid("com.atproto.server.revokeAppPassword", method: .post,
+                           body: Body(name: name))
     }
 
     // MARK: - Unmaking one

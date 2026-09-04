@@ -495,6 +495,19 @@ struct QuotedPost: Codable, Hashable {
     var value: PostRecord?
 }
 
+/// One app password as the server lists it. The password itself is not in here
+/// and cannot be: `listAppPasswords` returns names and dates, because a
+/// credential that can be read back is not a credential.
+struct AppPassword: Codable, Identifiable, Hashable {
+    let name: String
+    let createdAt: String
+    /// Whether this one can reach direct messages. Older servers omit the flag.
+    var privileged: Bool?
+
+    var id: String { name }
+    var canUseMessages: Bool { privileged == true }
+}
+
 // MARK: - Servers
 
 /// What a server says about itself, unauthenticated.

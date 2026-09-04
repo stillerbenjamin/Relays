@@ -48,6 +48,7 @@ struct SettingsSections: View {
     @State private var showsLabelers = false
     @State private var showsMutedWords = false
     @State private var showsNotifyKinds = false
+    @State private var showsAppPasswords = false
     @State private var showsLists = false
     @State private var showsDeleteAccount = false
     @State private var showsAddAccount = false
@@ -279,6 +280,10 @@ struct SettingsSections: View {
 
                 disclosure(L(.accountAdd), icon: "plus") { showsAddAccount = true }
                 Hairline(inset: Theme.Metric.hPadding)
+                // The credential this app signs in with — until now the only
+                // place to see or withdraw it was somebody else's website.
+                disclosure(L(.appPasswordsTitle), icon: "key") { showsAppPasswords = true }
+                Hairline(inset: Theme.Metric.hPadding)
                 SettingsValueRow(label: L(.settingsDID), value: app.session?.did ?? "—", truncatesMiddle: true)
                 Hairline(inset: Theme.Metric.hPadding)
                 SettingsValueRow(label: L(.settingsServer),
@@ -320,6 +325,11 @@ struct SettingsSections: View {
             Wordmark(size: 13)
                 .opacity(0.25)
                 .padding(.vertical, 32)
+        }
+        .sheet(isPresented: $showsAppPasswords) {
+            AppPasswordsView()
+                .presentationBackground(Theme.Palette.background)
+                .sheetSize()
         }
         .sheet(isPresented: $showsNotifyKinds) {
             NotificationKindsView()

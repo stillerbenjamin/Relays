@@ -197,6 +197,12 @@ To use direct messages the app password needs **message access**, which is a
 separate checkbox when you create it. An ordinary one cannot read messages, and
 the app says so rather than showing an error.
 
+Settings → App passwords lists what the account is reachable by and takes any of
+them back. It also makes new ones, shown once — the server does not hand a
+password out twice. What it cannot do is mark its own: nothing in the protocol
+says which password the current session was made with, so the screen says so
+instead of guessing.
+
 ---
 
 ## Tests
@@ -207,13 +213,13 @@ xcodebuild test -project Relays.xcodeproj -scheme Relays \
   -parallel-testing-enabled NO
 ```
 
-**267 unit tests** in 64 suites, plus **4 UI tests**. `-parallel-testing-enabled NO`
+**272 unit tests** in 65 suites, plus **4 UI tests**. `-parallel-testing-enabled NO`
 matters twice over: the layout snapshots write into the host app's documents
 directory, and a parallel clone's container is thrown away before the files can
 be collected — and the stub transport is one shared queue, which parallel suites
 scramble. Without the flag around forty tests fail for no reason of their own.
 
-The same suites run on macOS, where 262 of them apply — picture attachment is a
+The same suites run on macOS, where 267 of them apply — picture attachment is a
 UIKit path with nothing on the other side, and one snapshot is macOS-only:
 
 ```bash
